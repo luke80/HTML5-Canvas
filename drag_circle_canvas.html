@@ -1,0 +1,337 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+	  #container {
+		  height: 100%;
+		  width: 100%;
+	  }
+    </style>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js" type="text/javascript"></script>
+    <script src="js/kinetic-v4.3.3-beta.js"></script>
+    <script>
+	$(document).ready(function() {
+		$("#container").width($(window).width());
+		$("#container").height($(window).height());
+	});
+	var usedColors = [];
+	function getRandomHexColor() {
+		var allowNonWebSafe = (arguments[0] === true);
+		var strOut = "";
+		for(var i=0; i < 3; i++) {
+			var hex = Math.round(Math.random()*((allowNonWebSafe)?255:16)).toString(16);
+			strOut += ((hex.length < 2 && allowNonWebSafe)?"0":"")+hex;
+		}
+		if(typeof arguments[1] == "undefined") {
+			var maxLoops = 100;
+			var loopCount = 0;
+			while(maxLoops < loopCount && usedColors.indexOf(strOut) > -1) {
+				console.log("Color already used: "+strOut);
+				strOut = getRandomHexColor(allowNonWebSafe, true);
+				loopCount++;
+			}
+		}
+		usedColors.push(strOut);
+		return strOut;
+	}
+	function updateDottedLines(layer) {
+		var q = layer.quad;
+		var b = layer.bezier;
+		
+		var quadLine = layer.get('#quadLine')[0];
+		var bezierLine = layer.get('#bezierLine')[0];
+		
+		quadLine.setPoints([q.start.attrs.x, q.start.attrs.y, q.control.attrs.x, q.control.attrs.y, q.end.attrs.x, q.end.attrs.y]);
+		
+		bezierLine.setPoints([b.start.attrs.x, b.start.attrs.y, b.control1.attrs.x, b.control1.attrs.y, b.control2.attrs.x, b.control2.attrs.y, b.end.attrs.x, b.end.attrs.y]);
+		layer.draw();
+	}
+	function buildAnchor(layer, curveLayer, x, y) {
+		var anchor = new Kinetic.Circle({
+			x: x,
+			y: y,
+			radius: 5,
+			stroke: '#666',
+			fill: '#ddd',
+			strokeWidth: 2,
+			draggable: true
+		});
+	
+		// add hover styling
+		anchor.on('mouseover', function() {
+			document.body.style.cursor = 'pointer';
+			this.setStrokeWidth(4);
+			layer.draw();
+		});
+		anchor.on('mouseout', function() {
+			document.body.style.cursor = 'default';
+			this.setStrokeWidth(2);
+			layer.draw();
+		});
+		
+		anchor.on('dragend', function() {
+			drawCurves(curveLayer.getCanvas(), layer.quad, layer.bezier);
+			updateDottedLines(layer);
+		});
+		
+		layer.add(anchor);
+		return anchor;
+	}
+	function drawCurves(canvas, quad, bezier) {
+		canvas.clear();
+		var context = canvas.getContext();
+		
+		// draw quad
+		context.beginPath();
+		context.moveTo(quad.start.attrs.x, quad.start.attrs.y);
+		context.quadraticCurveTo(quad.control.attrs.x, quad.control.attrs.y, quad.end.attrs.x, quad.end.attrs.y);
+		context.strokeStyle = 'red';
+		context.lineWidth = 4;
+		context.stroke();
+		
+		// draw bezier
+		context.beginPath();
+		context.moveTo(bezier.start.attrs.x, bezier.start.attrs.y);
+		context.bezierCurveTo(bezier.control1.attrs.x, bezier.control1.attrs.y, bezier.control2.attrs.x, bezier.control2.attrs.y, bezier.end.attrs.x, bezier.end.attrs.y);
+		context.strokeStyle = 'blue';
+		context.lineWidth = 4;
+		context.stroke();
+	}
+	var circlesObj = {"circles":[]};
+	function getPreviousCircle(circle) {
+		for(var i=0; i < circlesObj.circles.length; i++) {
+			if(circlesObj.circles[i] == circle && i > 0)
+				return circlesObj.circles[i-1];
+		}
+		return false;
+	}
+	function getNextCircle(circle) {
+		for(var i=0; i < circlesObj.circles.length; i++) {
+			if(circlesObj.circles[i] == circle && i != circlesObj.circles.length-1)
+				return circlesObj.circles[i+1];
+		}
+		return false;
+	}
+	
+	window.onload = function() {
+		var stage = new Kinetic.Stage({
+		container: 'container',
+		width: $("#container").width(),
+		height: $("#container").height()
+		});
+
+		// layer contains lines and anchors
+		var layer = new Kinetic.Layer();
+		
+		// curveLayer just contains a canvas which is drawn
+		// onto with the existing canvas API
+		var curveLayer = new Kinetic.Layer();
+		
+		var quadLine = new Kinetic.Line({
+			dashArray: [10, 10, 0, 10],
+			strokeWidth: 3,
+			stroke: 'black',
+			lineCap: 'round',
+			id: 'quadLine',
+			opacity: 0.3,
+			points: [0, 0]
+		});
+		
+		var bezierLine = new Kinetic.Line({
+			dashArray: [10, 10, 0, 10],
+			strokeWidth: 3,
+			stroke: 'black',
+			lineCap: 'round',
+			id: 'bezierLine',
+			opacity: 0.3,
+			points: [0, 0]
+		});
+		
+		// add dotted line connectors
+		layer.add(quadLine);
+		layer.add(bezierLine);
+		
+		/*
+		* add custom property curve objects to layer so that
+		* they can be modified by reference
+		*/
+		layer.quad = {
+			start: buildAnchor(layer, curveLayer, 60, 30),
+			control: buildAnchor(layer, curveLayer, 240, 110),
+			end: buildAnchor(layer, curveLayer, 80, 160)
+		};
+		
+		layer.bezier = {
+			start: buildAnchor(layer, curveLayer, 280, 20),
+			control1: buildAnchor(layer, curveLayer, 530, 40),
+			control2: buildAnchor(layer, curveLayer, 480, 150),
+			end: buildAnchor(layer, curveLayer, 300, 150)
+		};
+		
+		stage.getDragLayer().beforeDraw(function() {
+			drawCurves(curveLayer.getCanvas(), layer.quad, layer.bezier);
+			updateDottedLines(layer);
+		});
+		
+		stage.on('mouseout', function() {
+			layer.draw();
+		});
+		
+		stage.add(curveLayer);
+		
+		var dragBeginHandler = function() {
+			if(typeof trans != "undefined") {
+				trans.stop();
+			}
+			
+			this.setAttrs({
+				shadowOffset: {
+					x: 15,
+					y: 15
+				},
+				scale: {
+					x: this.attrs.startScale * 1.2,
+					y: this.attrs.startScale * 1.2
+				}
+			});
+		};
+		var dragEndHandler = function() {
+			trans = this.transitionTo({
+				duration: 0.5,
+				easing: 'elastic-ease-out',
+				scale: {
+					x: this.attrs.startScale,
+					y: this.attrs.startScale
+				},
+				shadowOffset: {
+					x: 5,
+					y: 5
+				}
+			});
+			moveConnectingLines(this);
+		};
+		var moveConnectingLines = function(circle) {
+			var prevCircle = getPreviousCircle(circle);
+			var nextCircle = getNextCircle(circle);
+			console.log("previous:" + prevCircle['_id'] + "-=- current: " + circle['_id'] + " -=- next: "+nextCircle['_id']);
+			for(var i=0; i < circle.attrs.lines.length; i++) {
+				if(typeof circle.attrs.lines[i] != "undefined") {
+					if(circle.attrs.lines[i].attrs.circle0 && circle.attrs.lines[i].attrs.circle1) {
+						circle.attrs.lines[i].attrs.points[0] = circle.attrs.lines[i].attrs.circle0.getPosition();
+						circle.attrs.lines[i].attrs.points[1] = circle.attrs.lines[i].attrs.circle1.getPosition();
+						circle.attrs.lines[i].attrs.stroke = getRandomHexColor();
+					}
+				}
+			}
+		}
+		var changePointerMouseOverHandler = function() { document.body.style.cursor = 'pointer'; };
+		var changePointerMouseOutHandler = function() { document.body.style.cursor = 'default'; };
+		
+		
+		
+		
+		var previousLine;
+		for(var j=0; j < 16; j++) {
+			var connectorLine0 = new Kinetic.Line({
+				strokeWidth: 4,
+				stroke: 'black',
+				points: [{
+					x: 10,
+					y: 10
+				}, {
+					x: 20,
+					y: 20
+				}]
+			});
+			var connectorLine1 = new Kinetic.Line({
+				strokeWidth: 4,
+				stroke: 'black',
+				points: [{
+					x: 10,
+					y: 10
+				}, {
+					x: 20,
+					y: 20
+				}]
+			});
+			var circleRadius = stage.getWidth() / (8*2);
+			var circleX = stage.getWidth() * Math.random();
+			var circleY = stage.getHeight() * Math.random();
+			var scale = 1;
+			var circle = new Kinetic.Circle({
+				"x": circleX,
+				"y": circleY,
+				"radius": circleRadius,
+				"fill": '#'+getRandomHexColor(),
+				"stroke": 'white',
+				"strokeWidth": 1,
+				"draggable": true,
+				"scale": scale,
+				"rotationDeg": Math.random() * 180,
+				"shadowColor": 'black',
+				"shadowBlur": 10,
+				"shadowOffset": [5, 5],
+				"shadowOpacity": 0.6,
+				"startScale": scale,
+				"lines": [connectorLine0,connectorLine1]
+			});
+			if(j > 0) {
+				connectorLine0.attrs.circle0 = circlesObj.circles[j-1];
+				connectorLine0.attrs.circle1 = circle;
+				circlesObj.circles[j-1].attrs.lines[1].connectorLine1 = connectorLine0;
+			}
+			connectorLine1.attrs.circle0 = circle;
+			connectorLine1.attrs.circle1 = null;
+			circlesObj.circles.push(circle);
+		}
+		for(var j=0; j < circlesObj.circles.length; j++) {
+			circlesObj.circles[j].on('mouseover', changePointerMouseOverHandler);
+			circlesObj.circles[j].on('mouseout', changePointerMouseOutHandler);
+			circlesObj.circles[j].on('dragstart', dragBeginHandler);
+			circlesObj.circles[j].on('dragend', dragEndHandler);
+			//console.log(circlesObj.circles[j]);
+			
+			console.log(circlesObj.circles[j].attrs.lines);
+			for(var k=0; k < circlesObj.circles[j].attrs.lines.length; k++) {
+				if(typeof circlesObj.circles[j].attrs.lines[k] != "undefined") {
+					if(typeof circlesObj.circles[j].attrs.lines[k].attrs.circle0 != "undefined") {
+						circlesObj.circles[j].attrs.lines[k].attrs.points[0] = circlesObj.circles[j].attrs.lines[k].attrs.circle0.getPosition();
+					} else {
+						console.log("lines found, but not the circle0!");
+						console.log(circlesObj.circles[j].attrs.lines[k].attrs);
+					}
+					if(typeof circlesObj.circles[j].attrs.lines[k].attrs.circle1 != "undefined") {
+						circlesObj.circles[j].attrs.lines[k].attrs.points[1] = circlesObj.circles[j].attrs.lines[k].attrs.circle1.getPosition();
+					} else {
+						console.log("lines found, but not the circle1!");
+						console.log(circlesObj.circles[j].attrs.lines[k].attrs);
+					}
+					if(typeof circlesObj.circles[j].attrs.lines[k].attrs.circle0 != "undefined" && typeof circlesObj.circles[j].attrs.lines[k].attrs.circle1 != "undefined") {
+						layer.add(circlesObj.circles[j].attrs.lines[k]);
+					}
+				}
+			}
+			layer.add(circlesObj.circles[j]);
+			/*stage.getDragLayer().afterDraw(function() {
+				stem.attrs.points[0] = circle.getPosition();
+				lineLayer.draw();
+			});*/
+		}
+		
+		stage.add(layer);
+		
+		drawCurves(curveLayer.getCanvas(), layer.quad, layer.bezier);
+		updateDottedLines(layer);
+		
+	};
+	
+    </script>
+  </head>
+  <body onmousedown="return false;">
+    <div id="container"></div>
+  </body>
+</html>
